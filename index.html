@@ -8,14 +8,20 @@
                 text-align: center;
                 background-color: #000;
             }
+            #mapCanvas {
+                display:none;
+            }
             #mainCanvas {
                 border: 1px solid grey;
+                //cursor: none;
             }
         </style>
     </head>
     <body>
-        <h1>Game</h1>
-        <p><span id="fps">0</span> fps</p>
+        <h1>Game </h1>
+        <p>
+            <span id="fps">0</span> fps
+        </p>
         <div>
             <canvas id="mainCanvas" width="854" height="480"> mainCanvas </canvas>
         </div>

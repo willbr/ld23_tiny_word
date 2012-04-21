@@ -24,6 +24,11 @@ vk =
   s: 83
   d: 68
 
+vm =
+  left: 1
+  middle: 2
+  right: 3
+
 keyBindings = {}
 game.keyBindings = keyBindings
 
@@ -34,6 +39,7 @@ mouse =
   x: 0
   y: 0
   buttons: {}
+  selecting: false
 
 game.mouse = mouse
 
@@ -82,11 +88,49 @@ update = (dt) ->
     if pressed
       keyBindings[key]? dt
 
+  if mouse.buttons[vm.left]
+    if !mouse.selecting
+      # start selecting
+      mouse.selecting = true
+      mouse.fromX = mouse.x
+      mouse.fromY = mouse.y
+    else
+      ;
+  else
+    if mouse.selecting
+      mouse.selecting = false
+      # select stuff
+      console.log 'select'
+
+  if mouse.buttons[vm.right]
+    mouse.buttons[vm.right] = 0
+    console.log 'action'
+
 
 draw = (dt) ->
   drawWorld dt
-  ctx.fillStyle = "rgb(255,255,255)"
-  ctx.fillText "hello", 500, 50
+  drawActors dt
+  drawSelection dt
+  drawHub dt
+
+drawHub = (dt) ->
+  ctx.fillStyle = "rgb(130,130,130)"
+  ctx.fillRect 0, 0, 200, 40
+  ctx.fillStyle = "rgb(230,230,230)"
+  ctx.fillText "Score: #{game.state.world.score}", 10, 30
+
+drawSelection = (dt) ->
+  if mouse.selecting
+    w = mouse.x - mouse.fromX
+    h = mouse.y - mouse.fromY
+    ctx.fillStyle = "rgba(255,0,0,0.2)"
+    ctx.fillRect mouse.fromX, mouse.fromY, w, h
+    ctx.strokeStyle = "rgb(255,255,255)"
+    ctx.lineWidth = 2
+    ctx.strokeRect mouse.fromX, mouse.fromY, w, h
+
+drawActors = (dt) ->
+  ;
 
 drawWorld = (dt) ->
   world = game.state.world
@@ -95,25 +139,27 @@ drawWorld = (dt) ->
   if world.mapChanged
     world.mapChanged = 0
 
-    mapCtx.fillStyle = "rgba(255,255,255, 0.4)"
+    mapCtx.fillStyle = "rgba(145,145,225, 0.4)"
     mapCtx.fillRect 0, 0, mapCanvas.width, mapCanvas.height
 
     for x in [0...world.width]
       for y in [0...world.height]
         tile = world.map[x + y * world.width]
-        switch tile
-          when 0
-            mapCtx.fillStyle = "rgb(0,0,200)"
-          when 1
-            mapCtx.fillStyle = "rgb(200,200,0)"
-          when 2
-            mapCtx.fillStyle = "rgb(200, 100, 0)"
         xPos = x * tileSize + world.offsetX
         yPos = y * tileSize + world.offsetY
+        switch tile
+          when 0
+            mapCtx.fillStyle = "rgb(20,20,160)"
+            mapCtx.fillRect xPos, yPos, tileSize, tileSize
+          when 1
+            mapCtx.fillStyle = "rgb(200,200,40)"
+            mapCtx.fillRect xPos, yPos, tileSize, tileSize
+          when 2
+            mapCtx.fillStyle = "rgb(90, 150, 10)"
+            mapCtx.fillRect xPos, yPos, tileSize, tileSize
 
-        mapCtx.fillRect xPos, yPos, tileSize, tileSize
 
-    ctx.drawImage(mapCanvas, 0, 0)
+  ctx.drawImage(mapCanvas, 0, 0)
 
 
 relMouseCoords = (e) ->
@@ -135,9 +181,9 @@ mouseEvent = (e) ->
   mouse.y = coords.y
   switch e.type
     when "mouseup"
-      mouse.buttons[e.button] = 0
+      mouse.buttons[e.which] = 0
     when "mousedown"
-      mouse.buttons[e.button] = 1
+      mouse.buttons[e.which] = 1
     when "mousemove"
       ;
 
@@ -155,26 +201,68 @@ keyUp = (e) ->
 # register event handlers
 document.onkeydown = keyDown
 document.onkeyup = keyUp
-mainCanvas.onmouseup = mouseEvent
-mainCanvas.onmousedown = mouseEvent
-mainCanvas.onmousemove = mouseEvent
+
+document.onmouseup = mouseEvent
+document.onmousedown = mouseEvent
+document.onmousemove = mouseEvent
+
 mainCanvas.oncontextmenu = -> false
 
-world = 
+world =
   offsetX: 0
   offsetY: 0
   stepX: 1
   stepY: 1
   tileSize: 64
-  height: 5
-  width: 5
+  height: 40
+  width: 40
+  score: 0
+  selecting: false
   mapChanged: true
+  entities: []
   map: [
-    0,1,1,1,0
-    0,1,2,1,0
-    0,1,1,1,0
-    0,0,0,1,0
-    0,0,0,1,0
+    2,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,1,2,2,2,2,2,2,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,1,2,2,2,2,2,2,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    2,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,1,2,2,2,2,2,2,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,1,2,2,2,2,2,2,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
   ]
 
 
@@ -199,16 +287,16 @@ scrollWorld = (direction, dt) ->
 
 
 keyBindings[vk.w] = (dt) ->
-  scrollWorld "up", dt
-
-keyBindings[vk.a] = (dt) ->
-  scrollWorld "left", dt
-
-keyBindings[vk.s] = (dt) ->
   scrollWorld "down", dt
 
-keyBindings[vk.d] = (dt) ->
+keyBindings[vk.a] = (dt) ->
   scrollWorld "right", dt
+
+keyBindings[vk.s] = (dt) ->
+  scrollWorld "up", dt
+
+keyBindings[vk.d] = (dt) ->
+  scrollWorld "left", dt
 
 
 mainGameState = {
