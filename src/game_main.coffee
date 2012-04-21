@@ -15,12 +15,17 @@ no buildings
 wood for bridges
 """
 
+Point = (x, y) -> {x, y}
+
+toWorld = (p) ->
+  world = game.state.world
+  Point p.x + world.offset.x, p.y + world.offset.y
+
 game = {}
 document.game = game
 
 world =
-  offsetX: 0
-  offsetY: 0
+  offset: Point 0, 0
   stepX: 1
   stepY: 1
   tileSize: 64
@@ -117,10 +122,12 @@ keys = {}
 game.keys = keys
 
 mouse =
-  x: 0
-  y: 0
+  pos: Point 0,0
+  from: Point 0,0
   buttons: {}
   selecting: false
+
+console.log mouse
 
 game.mouse = mouse
 
@@ -163,7 +170,9 @@ getDelta = ->
 logFPS = (dt) ->
   game.fps = (1000 / dt).toFixed(0)
 
+
 update = (dt) ->
+  world = game.state.world
   logFPS(dt)
 
   # handle keys
@@ -175,8 +184,7 @@ update = (dt) ->
     if !mouse.selecting
       # start selecting
       mouse.selecting = true
-      mouse.fromX = mouse.x
-      mouse.fromY = mouse.y
+      mouse.from = Point mouse.pos.x, mouse.pos.y
     else
       ;
   else
@@ -184,17 +192,28 @@ update = (dt) ->
       mouse.selecting = false
       # select stuff
       console.log 'select'
+      for actor in world.actors
+        console.log
 
   if mouse.buttons[vm.right]
     mouse.buttons[vm.right] = 0
     console.log 'action'
-
 
 draw = (dt) ->
   drawWorld dt
   drawActors dt
   drawSelection dt
   drawHub dt
+
+drawActors = (dt) ->
+  world = game.state.world
+  for actor in world.actors
+    switch actor.selected
+      when true then ctx.fillStyle = "rgb(230,200,200)"
+      when false then ctx.fillStyle = "rgb(200,200,200)"
+    x = actor.pos.x + world.offset.x
+    y = actor.pos.y + world.offset.y
+    ctx.fillRect x, y, world.tileSize, world.tileSize
 
 drawHub = (dt) ->
   world = game.state.world
@@ -209,31 +228,22 @@ drawHub = (dt) ->
   # draw view outline
   ctx.strokeStyle = "rgb(255,0,0)"
   ctx.lineWidth = 2
-  viewLeft = miniMapOffsetX - world.offsetX / world.tileSize * miniMapCanvas.zoom
-  viewTop = miniMapOffsetY - world.offsetY / world.tileSize * miniMapCanvas.zoom
+  viewLeft = miniMapOffsetX - world.offset.x / world.tileSize * miniMapCanvas.zoom
+  viewTop = miniMapOffsetY - world.offset.y / world.tileSize * miniMapCanvas.zoom
   viewWidth = mainCanvas.width / world.tileSize * miniMapCanvas.zoom
   viewHeight = mainCanvas.height / world.tileSize * miniMapCanvas.zoom
   ctx.strokeRect viewLeft, viewTop, viewWidth, viewHeight
 
 drawSelection = (dt) ->
   if mouse.selecting
-    w = mouse.x - mouse.fromX
-    h = mouse.y - mouse.fromY
+    w = mouse.pos.x - mouse.from.x
+    h = mouse.pos.y - mouse.from.y
     ctx.fillStyle = "rgba(255,0,0,0.2)"
-    ctx.fillRect mouse.fromX, mouse.fromY, w, h
+    ctx.fillRect mouse.from.x, mouse.from.y, w, h
     ctx.strokeStyle = "rgb(255,255,255)"
     ctx.lineWidth = 2
-    ctx.strokeRect mouse.fromX, mouse.fromY, w, h
+    ctx.strokeRect mouse.from.x, mouse.from.y, w, h
 
-drawActors = (dt) ->
-  world = game.state.world
-  for actor in world.actors
-    switch actor.selected
-      when true then ctx.fillStyle = "rgb(230,200,200)"
-      when false then ctx.fillStyle = "rgb(200,200,200)"
-    x = actor.x + world.offsetX
-    y = actor.y + world.offsetY
-    ctx.fillRect x, y, world.tileSize, world.tileSize
 
 drawWorld = (dt) ->
   world = game.state.world
@@ -242,14 +252,14 @@ drawWorld = (dt) ->
   if world.mapChanged
     world.mapChanged = 0
 
-    mapCtx.fillStyle = "rgba(145,145,225, 0.4)"
+    mapCtx.fillStyle = "rgbx(145,145,225)"
     mapCtx.fillRect 0, 0, mapCanvas.width, mapCanvas.height
 
     for x in [0...world.width]
       for y in [0...world.height]
         tile = world.map[x + y * world.width]
-        xPos = x * tileSize + world.offsetX
-        yPos = y * tileSize + world.offsetY
+        xPos = x * tileSize + world.offset.x
+        yPos = y * tileSize + world.offset.y
         switch tile
           when 0
             mapCtx.fillStyle = "rgb(20,20,160)"
@@ -279,9 +289,7 @@ relMouseCoords = (e) ->
 HTMLCanvasElement.prototype.relMouseCoords = relMouseCoords
 
 mouseEvent = (e) ->
-  coords = mainCanvas.relMouseCoords e
-  mouse.x = coords.x
-  mouse.y = coords.y
+  mouse.pos = mainCanvas.relMouseCoords e
   switch e.type
     when "mouseup"
       mouse.buttons[e.which] = 0
@@ -311,7 +319,6 @@ document.onmousemove = mouseEvent
 
 mainCanvas.oncontextmenu = -> false
 
-
 world.maxOffsetX = mainCanvas.width / 2
 world.minOffsetX = (mainCanvas.width / 2) + world.width * world.tileSize * -1
 world.maxOffsetY = mainCanvas.height / 2
@@ -323,22 +330,20 @@ scrollWorld = (direction, dt) ->
   switch direction
     when "up"
       step = Math.floor(dt * world.stepY)
-      world.offsetY -= step
+      world.offset.y -= step
     when "down"
       step = Math.floor(dt * world.stepY)
-      world.offsetY += step
+      world.offset.y += step
     when "left"
       step = Math.floor(dt * world.stepX)
-      world.offsetX -= step
+      world.offset.x -= step
     when "right"
       step = Math.floor(dt * world.stepX)
-      world.offsetX += step
-
-
-  world.offsetX = world.maxOffsetX if world.offsetX > world.maxOffsetX
-  world.offsetX = world.minOffsetX if world.offsetX < world.minOffsetX
-  world.offsetY = world.maxOffsetY if world.offsetY > world.maxOffsetY
-  world.offsetY = world.minOffsetY if world.offsetY < world.minOffsetY
+      world.offset.x += step
+  world.offset.x = world.maxOffsetX if world.offset.x > world.maxOffsetX
+  world.offset.x = world.minOffsetX if world.offset.x < world.minOffsetX
+  world.offset.y = world.maxOffsetY if world.offset.y > world.maxOffsetY
+  world.offset.y = world.minOffsetY if world.offset.y < world.minOffsetY
 
 
 
@@ -362,8 +367,7 @@ mainGameState = {
 }
 
 world.actors.push
-  x: 0
-  y: 0
+  pos: Point 0, 0
   selected: false
 
 game.state = mainGameState
