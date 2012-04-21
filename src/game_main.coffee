@@ -11,9 +11,31 @@ units auto gen 1 every 15 seconds
 max 15 people
 start with 1 hero; no respawn
 
-limited buildings
-no repair of buildings
+no buildings
+wood for bridges
 """
+
+game = {}
+document.game = game
+
+vk =
+  w: 87
+  a: 65
+  s: 83
+  d: 68
+
+keyBindings = {}
+game.keyBindings = keyBindings
+
+keys = {}
+game.keys = keys
+
+mouse =
+  x: 0
+  y: 0
+  buttons: {}
+
+game.mouse = mouse
 
 requestAnimFrame =
     window.requestAnimationFrame       ||
@@ -24,8 +46,7 @@ requestAnimFrame =
     (callback) ->
         window.setTimeout callback, 1000 / 60
 
-game = {}
-document.game = game
+
 game.start = new Date
 game.start = game.start.toISOString()
 
@@ -33,10 +54,15 @@ console.log "starting: #{game.start}"
 
 wait = (milliseconds, func) -> setTimeout func, milliseconds
 
-canvas = document.getElementById "mainCanvas"
+mainCanvas = document.getElementById "mainCanvas"
+mapCanvas = document.getElementById "mapCanvas"
 
-if canvas.getContext
-  ctx = canvas.getContext '2d'
+if mainCanvas.getContext
+  ctx = mainCanvas.getContext '2d'
+  ctx.font = "32px Helvetica, sans-serif"
+
+if mapCanvas.getContext
+  mapCtx = mapCanvas.getContext '2d'
 
 getDelta = ->
   now = Date.now()
@@ -48,19 +74,47 @@ getDelta = ->
 logFPS = (dt) ->
   game.fps = (1000 / dt).toFixed(0)
 
-update = ->
-  dt = getDelta()
+update = (dt) ->
   logFPS(dt)
 
-draw = ->
-  ctx.fillStyle = 'rgb(255,0,0)'
-  ctx.fillRect 10, 10, 55, 50
+  # handle keys
+  for key, pressed of keys
+    if pressed
+      keyBindings[key]? dt
 
-  ctx.fillStyle = "rgba(0,0,200, 0.5)"
-  ctx.fillRect 30, 30, 55, 50
 
-  ctx.font = "32px Helvetica, sans-serif"
-  ctx.fillText("Test", 100, 100);
+draw = (dt) ->
+  drawWorld dt
+  ctx.fillStyle = "rgb(255,255,255)"
+  ctx.fillText "hello", 500, 50
+
+drawWorld = (dt) ->
+  world = game.state.world
+  tileSize = world.tileSize
+
+  if world.mapChanged
+    world.mapChanged = 0
+
+    mapCtx.fillStyle = "rgba(255,255,255, 0.4)"
+    mapCtx.fillRect 0, 0, mapCanvas.width, mapCanvas.height
+
+    for x in [0...world.width]
+      for y in [0...world.height]
+        tile = world.map[x + y * world.width]
+        switch tile
+          when 0
+            mapCtx.fillStyle = "rgb(0,0,200)"
+          when 1
+            mapCtx.fillStyle = "rgb(200,200,0)"
+          when 2
+            mapCtx.fillStyle = "rgb(200, 100, 0)"
+        xPos = x * tileSize + world.offsetX
+        yPos = y * tileSize + world.offsetY
+
+        mapCtx.fillRect xPos, yPos, tileSize, tileSize
+
+    ctx.drawImage(mapCanvas, 0, 0)
+
 
 relMouseCoords = (e) ->
   if e.pageX or e.pageY
@@ -75,30 +129,100 @@ relMouseCoords = (e) ->
 
 HTMLCanvasElement.prototype.relMouseCoords = relMouseCoords
 
-mouseDown = (e) ->
-  coords = canvas.relMouseCoords e
-  x = coords.x
-  y = coords.y
-  ctx.fillRect x, y, 55, 50
+mouseEvent = (e) ->
+  coords = mainCanvas.relMouseCoords e
+  mouse.x = coords.x
+  mouse.y = coords.y
+  switch e.type
+    when "mouseup"
+      mouse.buttons[e.button] = 0
+    when "mousedown"
+      mouse.buttons[e.button] = 1
+    when "mousemove"
+      ;
 
 keyDown = (e) ->
   e ?= window.event
+  keyCode = e.keyCode
+  keys[keyCode] = 1
+
 
 keyUp = (e) ->
   e?= window.event
+  keyCode = e.keyCode
+  keys[keyCode] = 0
 
+# register event handlers
 document.onkeydown = keyDown
 document.onkeyup = keyUp
-canvas.onmousedown = mouseDown
+mainCanvas.onmouseup = mouseEvent
+mainCanvas.onmousedown = mouseEvent
+mainCanvas.onmousemove = mouseEvent
+mainCanvas.oncontextmenu = -> false
 
-mainGameState = { update, draw }
+world = 
+  offsetX: 0
+  offsetY: 0
+  stepX: 1
+  stepY: 1
+  tileSize: 64
+  height: 5
+  width: 5
+  mapChanged: true
+  map: [
+    0,1,1,1,0
+    0,1,2,1,0
+    0,1,1,1,0
+    0,0,0,1,0
+    0,0,0,1,0
+  ]
+
+
+
+scrollWorld = (direction, dt) ->
+  world = game.state.world
+  world.mapChanged = true
+  switch direction
+    when "up"
+      step = Math.floor(dt * world.stepY)
+      world.offsetY -= step
+    when "down"
+      step = Math.floor(dt * world.stepY)
+      world.offsetY += step
+    when "left"
+      step = Math.floor(dt * world.stepX)
+      world.offsetX -= step
+    when "right"
+      step = Math.floor(dt * world.stepX)
+      world.offsetX += step
+
+
+
+keyBindings[vk.w] = (dt) ->
+  scrollWorld "up", dt
+
+keyBindings[vk.a] = (dt) ->
+  scrollWorld "left", dt
+
+keyBindings[vk.s] = (dt) ->
+  scrollWorld "down", dt
+
+keyBindings[vk.d] = (dt) ->
+  scrollWorld "right", dt
+
+
+mainGameState = {
+  update,
+  draw,
+  world,
+}
 
 game.state = mainGameState
 
-
 game.loop = ->
-  game.state.update()
-  game.state.draw()
+  dt = getDelta()
+  game.state.update dt
+  game.state.draw dt
   requestAnimFrame game.loop
 
 requestAnimFrame game.loop
