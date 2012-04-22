@@ -1,4 +1,5 @@
 todo = """
+world.actorsSelected = true
 path finding
 atacking
 build bridges
@@ -21,7 +22,23 @@ start with 1 unit
 no buildings
 """
 
+vk =
+  w: 87
+  a: 65
+  s: 83
+  d: 68
+
+vm =
+  left: 1
+  middle: 2
+  right: 3
+
 Point = (x, y) -> {x, y}
+
+Actor = (x,y) ->
+    pos: Point x * world.tileSize, y * world.tileSize
+    selected:false
+    path: []
 
 toWorld = (p) ->
   world = game.state.world
@@ -42,6 +59,7 @@ world =
   score: 0
   mapChanged: true
   actors: []
+  actorsSelected: []
   map: [
     2,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
@@ -111,17 +129,6 @@ for x in [0...world.width]
       miniMapCanvas.zoom
 
 
-vk =
-  w: 87
-  a: 65
-  s: 83
-  d: 68
-
-vm =
-  left: 1
-  middle: 2
-  right: 3
-
 keyBindings = {}
 game.keyBindings = keyBindings
 
@@ -131,10 +138,10 @@ game.keys = keys
 mouse =
   pos: Point 0,0
   from: Point 0,0
+  panPos: Point 0, 0
+  panning: false
   buttons: {}
   selecting: false
-
-console.log mouse
 
 game.mouse = mouse
 
@@ -210,15 +217,16 @@ update = (dt) ->
     if mouse.selecting
       world.debug.points = []
       mouse.selecting = false
+      world.actorsSelected = []
       # select stuff
       for actor in world.actors
         ap1 = Point actor.pos.x, actor.pos.y
         ap1.x += world.offset.x
         ap1.y += world.offset.y
         ap2 = Point ap1.x + world.tileSize, ap1.y + world.tileSize
-        console.log ap1
         if collide(ap1, ap2, mouse.from, mouse.pos)
           actor.selected = true
+          world.actorsSelected.push actor
           world.debug.points.push ap1
           world.debug.points.push ap2
           world.debug.points.push mouse.from
@@ -229,6 +237,23 @@ update = (dt) ->
   if mouse.buttons[vm.right]
     mouse.buttons[vm.right] = 0
     console.log 'action'
+    if world.actorsSelected.length > 0
+      #move actors
+      console.log 'move'
+
+  if mouse.buttons[vm.middle]
+    if mouse.panning
+      dx = mouse.pos.x - mouse.panPos.x
+      dy = mouse.pos.y - mouse.panPos.y
+      world.offset.x += dx
+      world.offset.y += dy
+      clipWorldOffset()
+      world.mapChanged = true
+    else
+      mouse.panning = true
+    mouse.panPos.x = mouse.pos.x; mouse.panPos.y = mouse.pos.y
+  else
+    mouse.panning = false
 
 draw = (dt) ->
   drawWorld dt
@@ -386,11 +411,15 @@ scrollWorld = (direction, dt) ->
     when "right"
       step = Math.floor(dt * world.stepX)
       world.offset.x += step
+  clipWorldOffset()
+
+
+clipWorldOffset = ->
+  world = game.state.world
   world.offset.x = world.maxOffsetX if world.offset.x > world.maxOffsetX
   world.offset.x = world.minOffsetX if world.offset.x < world.minOffsetX
   world.offset.y = world.maxOffsetY if world.offset.y > world.maxOffsetY
   world.offset.y = world.minOffsetY if world.offset.y < world.minOffsetY
-
 
 
 keyBindings[vk.w] = (dt) ->
@@ -411,10 +440,6 @@ mainGameState = {
   draw,
   world,
 }
-
-Actor = (x,y) ->
-    pos: Point x * world.tileSize, y * world.tileSize
-    selected:false
 
 world.actors.push Actor 0, 0
 world.actors.push Actor 4, 4
