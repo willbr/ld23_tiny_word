@@ -1,3 +1,10 @@
+todo = """
+path finding
+atacking
+build bridges
+ai
+"""
+
 notes = """
 tiny world rts
 
@@ -9,10 +16,9 @@ units move quickly
 
 units auto gen 1 every 15 seconds
 max 15 people
-start with 1 hero; no respawn
+start with 1 unit
 
 no buildings
-wood for bridges
 """
 
 Point = (x, y) -> {x, y}
@@ -25,6 +31,8 @@ game = {}
 document.game = game
 
 world =
+  debug:
+    points: []
   offset: Point 0, 0
   stepX: 1
   stepY: 1
@@ -32,7 +40,6 @@ world =
   height: 40
   width: 40
   score: 0
-  selecting: false
   mapChanged: true
   actors: []
   map: [
@@ -171,6 +178,18 @@ logFPS = (dt) ->
   game.fps = (1000 / dt).toFixed(0)
 
 
+inside = (p, p1, p2) ->
+  if (p.x > Math.min(p1.x, p2.x) and p.x < Math.max(p1.x, p2.x)) and (p.y > Math.min(p1.y, p2.y) and p.y < Math.max(p1.y, p2.y))
+    return true
+  else
+    return false
+
+collide = (ap1, ap2, bp1, bp2) ->
+  if inside(ap1, bp1, bp2) or inside(ap2, bp1, bp2) or inside(bp1, ap1, ap2) or inside(bp2, ap1, ap2)
+    return true
+  else
+    return false
+
 update = (dt) ->
   world = game.state.world
   logFPS(dt)
@@ -189,11 +208,23 @@ update = (dt) ->
       ;
   else
     if mouse.selecting
+      world.debug.points = []
       mouse.selecting = false
       # select stuff
-      console.log 'select'
       for actor in world.actors
-        console.log
+        ap1 = Point actor.pos.x, actor.pos.y
+        ap1.x += world.offset.x
+        ap1.y += world.offset.y
+        ap2 = Point ap1.x + world.tileSize, ap1.y + world.tileSize
+        console.log ap1
+        if collide(ap1, ap2, mouse.from, mouse.pos)
+          actor.selected = true
+          world.debug.points.push ap1
+          world.debug.points.push ap2
+          world.debug.points.push mouse.from
+          world.debug.points.push mouse.pos
+        else
+          actor.selected = false
 
   if mouse.buttons[vm.right]
     mouse.buttons[vm.right] = 0
@@ -203,33 +234,50 @@ draw = (dt) ->
   drawWorld dt
   drawActors dt
   drawSelection dt
-  drawHub dt
+  drawHud dt
+  # drawDebug dt
 
 drawActors = (dt) ->
   world = game.state.world
   for actor in world.actors
     switch actor.selected
-      when true then ctx.fillStyle = "rgb(230,200,200)"
+      when true then ctx.fillStyle = "rgb(255,150,150)"
       when false then ctx.fillStyle = "rgb(200,200,200)"
     x = actor.pos.x + world.offset.x
     y = actor.pos.y + world.offset.y
     ctx.fillRect x, y, world.tileSize, world.tileSize
 
-drawHub = (dt) ->
+drawDebug = (dt) ->
+  world = game.state.world
+  for p in world.debug.points
+    ctx.fillStyle = "rgb(255,0,0)"
+    ctx.fillRect p.x - 4, p.y - 4, 8, 8
+
+drawHud = (dt) ->
   world = game.state.world
   ctx.fillStyle = "rgb(130,130,130)"
-  ctx.fillRect 0, 0, 200, 40
+  #ctx.fillRect 0, 0, 200, 40
   ctx.fillStyle = "rgb(230,230,230)"
-  ctx.fillText "Score: #{game.state.world.score}", 10, 30
+  #ctx.fillText "Score: #{game.state.world.score}", 10, 30
 
-  miniMapOffsetX = mainCanvas.width - miniMapCanvas.width
-  miniMapOffsetY = mainCanvas.height - miniMapCanvas.height
-  ctx.drawImage miniMapCanvas, miniMapOffsetX, miniMapOffsetY
-  # draw view outline
+  miniMapOffset = Point mainCanvas.width - miniMapCanvas.width, mainCanvas.height - miniMapCanvas.height
+  ctx.drawImage miniMapCanvas, miniMapOffset.x, miniMapOffset.y
+  for actor in world.actors
+    switch actor.selected
+      when true then ctx.fillStyle = "rgb(255,50,50)"
+      when false then ctx.fillStyle = "rgb(200,200,200)"
+    x = actor.pos.x / world.tileSize
+    y = actor.pos.y / world.tileSize
+    x *= miniMapCanvas.zoom
+    y *= miniMapCanvas.zoom
+    x += miniMapOffset.x
+    y += miniMapOffset.y
+    ctx.fillRect x, y, 4, 4
+  # draw screen outline
   ctx.strokeStyle = "rgb(255,0,0)"
   ctx.lineWidth = 2
-  viewLeft = miniMapOffsetX - world.offset.x / world.tileSize * miniMapCanvas.zoom
-  viewTop = miniMapOffsetY - world.offset.y / world.tileSize * miniMapCanvas.zoom
+  viewLeft = miniMapOffset.x - world.offset.x / world.tileSize * miniMapCanvas.zoom
+  viewTop = miniMapOffset.y - world.offset.y / world.tileSize * miniMapCanvas.zoom
   viewWidth = mainCanvas.width / world.tileSize * miniMapCanvas.zoom
   viewHeight = mainCanvas.height / world.tileSize * miniMapCanvas.zoom
   ctx.strokeRect viewLeft, viewTop, viewWidth, viewHeight
@@ -272,7 +320,7 @@ drawWorld = (dt) ->
             mapCtx.fillRect xPos, yPos, tileSize, tileSize
 
 
-  ctx.drawImage mapCanvas, 0, 0 
+  ctx.drawImage mapCanvas, 0, 0
 
 
 relMouseCoords = (e) ->
@@ -295,8 +343,6 @@ mouseEvent = (e) ->
       mouse.buttons[e.which] = 0
     when "mousedown"
       mouse.buttons[e.which] = 1
-    when "mousemove"
-      ;
 
 keyDown = (e) ->
   e ?= window.event
@@ -366,9 +412,14 @@ mainGameState = {
   world,
 }
 
-world.actors.push
-  pos: Point 0, 0
-  selected: false
+Actor = (x,y) ->
+    pos: Point x * world.tileSize, y * world.tileSize
+    selected:false
+
+world.actors.push Actor 0, 0
+world.actors.push Actor 4, 4
+world.actors.push Actor 8, 6
+world.actors.push Actor 10, 9
 
 game.state = mainGameState
 
