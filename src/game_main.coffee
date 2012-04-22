@@ -1,5 +1,4 @@
 todo = """
-world.actorsSelected = true
 path finding
 atacking
 build bridges
@@ -33,16 +32,90 @@ vm =
   middle: 2
   right: 3
 
-Point = (x, y) -> {x, y}
+Point = (x, y) -> {
+  x
+  y
+  str: ->
+    return "#{x},#{y}"
+  eq: (p) ->
+    if p.x is @x and p.y is @y
+      return true
+    else
+      return false
+  tile: ->
+    return Point(Math.floor(@x / world.tileSize), Math.floor(@y / world.tileSize))
+  world: ->
+    return Point(@x * world.tileSize, @y * world.tileSize)
+  near: (p)->
+    nx = Math.abs(p.x - @x)
+    ny = Math.abs(p.y - @y)
+    halfTile = world.tileSize / 2
+    if nx < halfTile and ny < halfTile
+      return true
+    else
+      return false
+}
 
 Actor = (x,y) ->
-    pos: Point x * world.tileSize, y * world.tileSize
-    selected:false
-    path: []
+  pos: Point x * world.tileSize, y * world.tileSize
+  selected:false
+  nextTile: null
+  target: null
+  speed: 1
+  travel: [1,2]
 
-toWorld = (p) ->
-  world = game.state.world
-  Point p.x + world.offset.x, p.y + world.offset.y
+  calculateNextTile: ->
+    nextTile = @pos.tile()
+    currentTile = @pos.tile()
+    targetTile = @target.tile()
+
+    if targetTile.x > currentTile.x
+      nextTile.x += 1
+    else if targetTile.x == currentTile.x
+      ;
+    else
+      nextTile.x -= 1
+    if targetTile.y > currentTile.y
+      nextTile.y += 1
+    else if targetTile.y == currentTile.y
+      ;
+    else
+      nextTile.y -= 1
+
+    tile = tileType(nextTile)
+    if tile in @travel
+      @nextTile = nextTile
+    return
+
+  move: (dt) ->
+    return if not @nextTile?
+    step = Point 0, 0
+    nextTarget = @nextTile.world()
+
+    if nextTarget.x > @pos.x
+      step.x = dt * @speed
+    else if nextTarget.x == @pos.x
+      ;
+    else
+      step.x = -dt * @speed
+
+    if nextTarget.y > @pos.y
+      step.y = dt * @speed
+    else if nextTarget.y == @pos.y
+      ;
+    else
+      step.y = -dt * @speed
+
+    @pos.x += step.x
+    @pos.y += step.y
+    if @pos.near nextTarget
+      @pos = nextTarget
+
+    # reached target?
+    @target = null if @pos.eq @target
+
+tileType = (p) ->
+  return world.map[p.x + p.y * world.width]
 
 game = {}
 document.game = game
@@ -50,7 +123,7 @@ document.game = game
 world =
   debug:
     points: []
-  offset: Point 0, 0
+  offset: Point(-200, -300)
   stepX: 1
   stepY: 1
   tileSize: 64
@@ -60,6 +133,7 @@ world =
   mapChanged: true
   actors: []
   actorsSelected: []
+  busyTiles: []
   map: [
     2,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
@@ -128,7 +202,6 @@ for x in [0...world.width]
       miniMapCanvas.zoom,
       miniMapCanvas.zoom
 
-
 keyBindings = {}
 game.keyBindings = keyBindings
 
@@ -164,6 +237,12 @@ wait = (milliseconds, func) -> setTimeout func, milliseconds
 
 mainCanvas = document.getElementById "mainCanvas"
 mapCanvas = document.getElementById "mapCanvas"
+width = document.documentElement.clientWidth - 200
+height = document.documentElement.clientHeight - 200
+mainCanvas.width = width
+mainCanvas.height = height
+mapCanvas.width = width
+mapCanvas.height = height
 
 
 if mainCanvas.getContext
@@ -172,7 +251,6 @@ if mainCanvas.getContext
 
 if mapCanvas.getContext
   mapCtx = mapCanvas.getContext '2d'
-
 
 getDelta = ->
   now = Date.now()
@@ -198,7 +276,7 @@ collide = (ap1, ap2, bp1, bp2) ->
     return false
 
 update = (dt) ->
-  world = game.state.world
+  world = game.world
   logFPS(dt)
 
   # handle keys
@@ -206,6 +284,11 @@ update = (dt) ->
     if pressed
       keyBindings[key]? dt
 
+  updateMouse dt
+  updateActors dt
+
+
+updateMouse = (dt) ->
   if mouse.buttons[vm.left]
     if !mouse.selecting
       # start selecting
@@ -234,12 +317,21 @@ update = (dt) ->
         else
           actor.selected = false
 
+
   if mouse.buttons[vm.right]
+    # action button
     mouse.buttons[vm.right] = 0
-    console.log 'action'
     if world.actorsSelected.length > 0
       #move actors
-      console.log 'move'
+      for actor in world.actorsSelected
+        from = Point actor.pos.x, actor.pos.y
+        to = Point mouse.pos.x - world.offset.x, mouse.pos.y - world.offset.y
+        # lock to tile
+        to.x = to.x - to.x % world.tileSize
+        to.y = to.y - to.y % world.tileSize
+        
+        actor.target = to
+        actor.nextTile = null
 
   if mouse.buttons[vm.middle]
     if mouse.panning
@@ -255,15 +347,22 @@ update = (dt) ->
   else
     mouse.panning = false
 
+updateActors = (dt) ->
+  for actor in world.actors
+    if actor.target?
+      actor.calculateNextTile()
+      actor.move dt
+  1
+
 draw = (dt) ->
   drawWorld dt
   drawActors dt
   drawSelection dt
   drawHud dt
-  # drawDebug dt
+  drawDebug dt
 
 drawActors = (dt) ->
-  world = game.state.world
+  world = game.world
   for actor in world.actors
     switch actor.selected
       when true then ctx.fillStyle = "rgb(255,150,150)"
@@ -273,17 +372,33 @@ drawActors = (dt) ->
     ctx.fillRect x, y, world.tileSize, world.tileSize
 
 drawDebug = (dt) ->
-  world = game.state.world
-  for p in world.debug.points
-    ctx.fillStyle = "rgb(255,0,0)"
-    ctx.fillRect p.x - 4, p.y - 4, 8, 8
+  world = game.world
+  #for p in world.debug.points
+    #ctx.fillStyle = "rgb(255,0,0)"
+    #ctx.fillRect p.x - 4, p.y - 4, 8, 8
+  blockSize = 16
+  for actor in world.actors
+    if actor.target?
+      x = actor.target.x + world.offset.x + world.tileSize / 2 - blockSize / 2
+      y = actor.target.y + world.offset.y + world.tileSize / 2 - blockSize / 2
+      ctx.fillStyle = "rgb(255,255,255)"
+      ctx.fillRect x, y, blockSize, blockSize
+      if actor.nextTile?
+        x = world.tileSize * actor.nextTile.x + world.offset.x + world.tileSize / 2 - blockSize / 2
+        y = world.tileSize * actor.nextTile.y + world.offset.y + world.tileSize / 2 - blockSize / 2
+        ctx.fillStyle = "rgb(10,255,255)"
+        ctx.fillRect x, y, blockSize, blockSize
+  return
+
+
+
 
 drawHud = (dt) ->
-  world = game.state.world
+  world = game.world
   ctx.fillStyle = "rgb(130,130,130)"
   #ctx.fillRect 0, 0, 200, 40
   ctx.fillStyle = "rgb(230,230,230)"
-  #ctx.fillText "Score: #{game.state.world.score}", 10, 30
+  #ctx.fillText "Score: #{game.world.score}", 10, 30
 
   miniMapOffset = Point mainCanvas.width - miniMapCanvas.width, mainCanvas.height - miniMapCanvas.height
   ctx.drawImage miniMapCanvas, miniMapOffset.x, miniMapOffset.y
@@ -319,7 +434,7 @@ drawSelection = (dt) ->
 
 
 drawWorld = (dt) ->
-  world = game.state.world
+  world = game.world
   tileSize = world.tileSize
 
   if world.mapChanged
@@ -396,7 +511,7 @@ world.maxOffsetY = mainCanvas.height / 2
 world.minOffsetY = (mainCanvas.height / 2) + world.height * world.tileSize * -1
 
 scrollWorld = (direction, dt) ->
-  world = game.state.world
+  world = game.world
   world.mapChanged = true
   switch direction
     when "up"
@@ -415,7 +530,7 @@ scrollWorld = (direction, dt) ->
 
 
 clipWorldOffset = ->
-  world = game.state.world
+  world = game.world
   world.offset.x = world.maxOffsetX if world.offset.x > world.maxOffsetX
   world.offset.x = world.minOffsetX if world.offset.x < world.minOffsetX
   world.offset.y = world.maxOffsetY if world.offset.y > world.maxOffsetY
@@ -435,23 +550,17 @@ keyBindings[vk.d] = (dt) ->
   scrollWorld "left", dt
 
 
-mainGameState = {
-  update,
-  draw,
-  world,
-}
+game.update = update
+game.draw = draw
+game.world = world
 
-world.actors.push Actor 0, 0
-world.actors.push Actor 4, 4
-world.actors.push Actor 8, 6
+world.actors.push Actor 8, 9
 world.actors.push Actor 10, 9
-
-game.state = mainGameState
 
 game.loop = ->
   dt = getDelta()
-  game.state.update dt
-  game.state.draw dt
+  game.update dt
+  game.draw dt
   requestAnimFrame game.loop
 
 requestAnimFrame game.loop
